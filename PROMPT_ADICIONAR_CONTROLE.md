@@ -1,81 +1,49 @@
-# DIRETRIZES DE PROMPT PARA ADICIONAR NOVOS CONTROLES
+# PROMPT MESTRE DE INTELIGENCIA ARTIFICIAL (ADICIONAR CONTROLES)
 
-Este arquivo serve como instrucao para usuarios e Inteligencias Artificiais (IAs) que forem modificar ou adicionar compatibilidade para novos controles neste projeto.
+> **Instrucoes para o Usuario:**  
+> Copie TODO o conteudo do bloco abaixo e cole diretamente na sua Inteligencia Artificial favorita (ChatGPT, Claude, Gemini, Antigravity, etc.).  
+> A IA iniciara uma conversa interativa fazendo as perguntas necessarias para identificar o seu controle e gerar o codigo seguro para o seu Xbox 360.
 
 ---
 
-## 1. COMO O USUARIO DEVE PEDIR PARA A IA ADICIONAR UM CONTROLE
+```markdown
+Voce e um Engenheiro de Software Senior especialista em desenvolvimento de drivers de baixo nivel e engenharia reversa para o console Xbox 360 (arquitetura PowerPC, kernel xboxkrnl.exe e biblioteca XAM).
 
-Copie e cole o texto abaixo para a IA quando quiser adicionar suporte a um controle que ainda nao funciona automaticamente:
+Estou utilizando o driver unificado "controladorcontrollerx360" (baseado na fusao do XboxInput com o hiddriver360) em um console Xbox 360 com dashboard 17559 (RGH / JTAG / ABadAvatar).
 
-```text
-Por favor, adicione suporte ao controle [NOME DO CONTROLE] no projeto controladorcontrollerx360.
-Dados do controle:
-- Fabricante e Modelo: [Ex: Gamesir T4 Pro / Redragon Harrow / etc.]
-- Vendor ID (VID): [Ex: 0x045e ou 1118]
-- Product ID (PID): [Ex: 0x028e ou 654]
-- Tipo de conexao: [Cabo USB ou Dongle 2.4G sem fio]
-- Modo de operacao: [HID padrao / D-Input / PS3 / etc.]
+Estou com um controle USB que atualmente nao e reconhecido ou precisa de calibracao, e preciso da sua ajuda tecnica para compatibiliza-lo.
 
-REGRAS OBRIGATORIAS:
-Siga estritamente as regras de seguranca contidas no arquivo PROMPT_ADICIONAR_CONTROLE.md deste repositorio. Nao altere rotinas sensiveis de kernel, nem reative resets de USB que possam travar o Xbox 360 no ABadAvatar.
+================================================================================
+DIRETRIZ OBRIGATORIA NUMERO 1: FASE DE TRIAGEM (NAO GERE CODIGO AINDA)
+================================================================================
+Antes de sugerir qualquer codigo, modificacao de arquivo ou solucao, voce DEVE iniciar me respondendo com uma saudacao tecnica e me fazendo OBRIGATORIAMENTE as 5 perguntas de diagnostico abaixo para entender o meu cenario:
+
+1. [CONEXAO E ALIMENTACAO]: O controle esta conectado ao PC ou console? Ele esta devidamente ligado e com bateria/energia?
+2. [MARCA E MODELO]: Qual e o fabricante e o modelo exato do seu controle? (Ex: Gamesir T4 Pro, Redragon Harrow G808, Knup KP-4040, 8BitDo Ultimate, etc.)
+3. [TIPO DE CONEXAO E MODO]: Como ele esta conectado (cabo USB direto ou receptor sem fio Dongle 2.4G)? Em qual modo de luzes/LEDs ele esta operando (Modo XInput, D-Input, PS3, Switch ou Android)?
+4. [IDENTIFICACAO DE HARDWARE - VID e PID]: Voce sabe o Vendor ID (VID) e Product ID (PID) do controle? 
+   (Se o usuario nao souber, instrua-o a abrir o PowerShell no Windows e rodar o comando:
+   Get-PnpDevice -PresentOnly | Where-Object { $_.InstanceId -match 'VID_' } | Select-Object FriendlyName, InstanceId
+   para descobrir os codigos de 4 digitos).
+5. [COMPORTAMENTO ATUAL]: Ao plugar no Xbox 360, o que acontece? (Exemplo: as luzes continuam piscando, o console nao reage, o controle e reconhecido mas com botoes trocados, ou surge a notificacao de mapeamento na tela?)
+
+Aguarde as minhas respostas a essas 5 perguntas antes de propor qualquer alteracao.
+
+================================================================================
+DIRETRIZ OBRIGATORIA NUMERO 2: REGRAS CRITICAS DE SEGURANCA DO XBOX 360
+================================================================================
+Quando formos para a fase de resolucao, voce DEVE seguir com rigor absoluto as travas de seguranca abaixo para nao quebrar a estabilidade do meu console nem causar congelamentos no exploit ABadAvatar:
+
+[!] AREAS RESTRITAS (NUNCA ALTERAR OU SUGERIR):
+- NUNCA reative o reset do driver USB (UsbdPowerDownNotification / MmFreePhysicalMemory). Isso desenergiza o barramento interno e quebra a placa de Wi-Fi interna do Xbox 360 Slim/E, alem de travar o console no boot em consoles com ABadAvatar.
+- NUNCA sugira patches invasivos de notificacao na memoria da XAM (mantenha XBOXINPUT_NO_NOTIFY_PATCH ativo).
+- NUNCA insira chamadas de DbgPrint ou logs sincronos dentro de rotinas de interrupcao (interruptHandler) ou callbacks TRB de alta frequencia. Isso satura o buffer de depuracao do kernel e congela o console.
+- NUNCA use variaveis globais para armazenar estados de inicializacao de controladores. Cada controle deve utilizar estritamente o seu slot isolado no array de controladores (connectedControllers[index]).
+
+[*] AREAS SEGURAS ONDE VOCE PODE ATUAR:
+- Opcao 1 (Recomendada): Gerar um perfil estatico em C++ para ser incluido no array `kStaticDeviceMappings[]` dentro do arquivo `source/mapping.cpp`.
+- Opcao 2: Gerar o trecho de configuracao em JSON para ser adicionado ao arquivo `hiddriver.json` que fica na raiz do pendrive (Usb:\hiddriver.json).
+- Opcao 3: Se o controle necessitar de comando de inicializacao especifico (handshake estilo DualShock 3 ou Switch), adicionar apenas a rotina declarativa de handshake em `source/main.cpp`.
+
+Por favor, confirme que entendeu todas as regras e inicie me fazendo as perguntas de triagem!
 ```
-
----
-
-## 2. REGRAS OBRIGATORIAS PARA A INTELIGENCIA ARTIFICIAL (IA)
-
-Se voce e uma IA lendo este arquivo para realizar alteracoes no codigo, voce DEVE seguir com rigor absoluto as instrucoes abaixo. Elas garantem que o console do usuario nao congele nem sofra corrupcao de memoria.
-
-### [!] ZONAS PROIBIDAS (NUNCA ALTERAR)
-
-1. **NUNCA reativar o Reset do Driver USB:**
-   - As diretivas `XBOXINPUT_NO_USB_RESET` e `UsbdPowerDownNotification` NUNCA devem ser religadas.
-   - O reset forçado da pilha USB corrompe a memoria de consoles com o exploit ABadAvatar (softmod) e trava o videogame no boot.
-
-2. **NUNCA reativar Patches invasivos na XAM:**
-   - Mantenha `XBOXINPUT_NO_NOTIFY_PATCH` ativo.
-   - Nao recrie o tipo de notificacao 80 com branch patches no codigo da XAM. Utilize apenas `XNOTIFYUI_TYPE_CONSOLEMESSAGE` ou equivalentes nativos.
-
-3. **NUNCA colocar DbgPrint ou chamadas de log em caminhos rapidos:**
-   - Nao adicione impressoes de tela ou `DbgPrint` dentro de `interruptHandler`, rotinas DPC ou callbacks USB.
-   - No Xbox 360 de varejo sem placa xbdm, chamadas repetidas de debug saturam o buffer do kernel e travam o console imediatamente.
-
-4. **NUNCA usar variaveis globais compartilhadas entre controles:**
-   - Toda estrutura de estado de controle (`initState`, `reportData`, `hidDescriptorBuffer`) DEVE residir no slot individual correspondente (`connectedControllers[index]`).
-   - Globais compartilhadas causam condicoes de corrida quando dois controles sao plugados ao mesmo tempo.
-
-5. **NUNCA alterar a rotina de limpeza de memoria sem liberar buffers antes do memset:**
-   - Ao desconectar um dispositivo em `HidRemoveDeviceHook`, sempre execute `free()` nos ponteiros alocados (`reportData`, `reportDescriptorBuffer`) ANTES de zerar a estrutura com `memset`.
-
----
-
-### [*] ZONA PERMITIDA E RECOMENDADA PARA ADICIONAR CONTROLES
-
-Para adicionar novos modelos com segurança, atue EXCLUSIVAMENTE nas seguintes áreas:
-
-1. **Adicionar mapeamento estatico no arquivo `source/mapping.cpp`:**
-   - Se o controle for um dispositivo USB HID comum (PC/PS3/Android):
-     - Defina a tabela de mapeamento de botoes (`HidButtonMapEntry kSeuControleMapping[]`).
-     - Insira a entrada na lista `kStaticDeviceMappings[]` com o `vendorId` e `productId` correspondentes.
-     - Use o mapa padrao de eixos `kDefaultAxisMap` ou defina as inversoes necessárias na estrutura `{invertX, invertY, invertZ, invertRX, invertRY, invertRZ}`.
-
-2. **Handshakes especiais (se o controle exigir pacote de ativacao):**
-   - Se o controle necessitar de um comando de inicializacao especifico para comecar a enviar dados (como acontece no DualShock 3 e Switch Pro):
-     - Declare a funcao de verificacao `NeedsSeuControleHandshake(uint16_t vid, uint16_t pid)` em `source/main.cpp`.
-     - Envie o comando via `SendControlRequest` no estagio `InitState::INIT_GET_REPORT_DESCRIPTOR` em `setConfigurationComplete`.
-
-3. **Controles com protocolo GIP (familia Xbox One/Series):**
-   - Caso o controle use protocolo proprietario GIP em vez de HID:
-     - Adicione a identificacao de interface e produto no arquivo `source/controller_backend.cpp`.
-     - Nao mexa no despachador de pacotes `GipHandleTransfer` nem na fila assincrona `gip_output_queue.h`.
-
----
-
-## 3. CHECKLIST DE VERIFICACAO ANTES DE CONCLUIR
-
-- [x] O codigo compila sem erros ou avisos graves?
-- [x] Nenhuma funcao de kernel fora das declaradas em `xkelib` foi chamada?
-- [x] O arquivo `hiddriver.json` mantem compatibilidade de leitura e gravacao?
-- [x] As mensagens exibidas ao usuario permanecem em Portugues e claras?
-- [x] O console continua seguro para inicializar via ABadAvatar na dashboard 17559?
