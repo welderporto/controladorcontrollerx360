@@ -1,46 +1,79 @@
 #!/usr/bin/env python3
 """
-tools/identificar_controle.py - Diagnosticador e Extrator de Dados de Controles USB para Xbox 360
+tools/identificar_controle.py - Diagnosticador de Controles USB / 2.4G para Xbox 360
 Compativel com Windows 10/11.
 
-Como usar:
-1. Conecte seu controle USB (ou o receptor/dongle sem fio) no computador.
-2. Certifique-se de que o controle esta ligado.
-3. Execute: python tools/identificar_controle.py
+Recursos:
+1. Leitura completa com hidapi (Report Descriptors e pacotes brutos).
+2. Pergunta autorizacao antes de qualquer instalacao.
+3. Desinstalacao automatica apos a leitura para manter o PC limpo.
+4. Modo alternativo 100% nativo (PowerShell) sem instalar nenhuma biblioteca externa.
 """
 
 import sys
 import time
 import subprocess
+import os
+
+def native_windows_scan():
+    """Realiza uma varredura nativa usando PowerShell sem instalar nada no sistema."""
+    print("\n[+] Executando varredura nativa via PowerShell (sem instalacoes)...")
+    cmd = (
+        "Get-PnpDevice -PresentOnly | "
+        "Where-Object { $_.InstanceId -match 'VID_' -and ($_.Class -eq 'HIDClass' -or $_.Class -eq 'USB') } | "
+        "Select-Object FriendlyName, InstanceId | Format-List"
+    )
+    try:
+        proc = subprocess.run(["powershell", "-NoProfile", "-Command", cmd], capture_output=True, text=True)
+        print(proc.stdout)
+        print("Dica: Os 4 digitos apos 'VID_' sao o Vendor ID, e apos 'PID_' sao o Product ID.")
+    except Exception as e:
+        print(f"[!] Erro ao executar PowerShell: {e}")
 
 def ask_user_permission(package_name):
-    print(f"\n[AVISO DE INSTALACAO]")
-    print(f"Para ler os descritores do seu controle via USB, e necessario o pacote Python '{package_name}'.")
-    print(f"Apos a leitura dos dados, o pacote podera ser desinstalado automaticamente.\n")
-    resp = input(f"Deseja autorizar a instalacao temporaria do '{package_name}'? (s/n) [Padrao: s]: ").strip().lower()
-    return resp in ('', 's', 'sim', 'y', 'yes')
+    print(f"\n=======================================================")
+    print(f"  SOLICITACAO DE PERMISSAO DE INSTALACAO")
+    print(f"=======================================================")
+    print(f"Para extrair a estrutura completa dos botoes e o HID")
+    print(f"Report Descriptor, e necessario o pacote Python '{package_name}'.")
+    print(f"Assim que a leitura terminar, o pacote sera completamente")
+    print(f"desinstalado do seu computador, garantindo seguranca e limpeza.\n")
+    print(f"[1] Sim, autorizo a instalacao temporaria do '{package_name}'")
+    print(f"[2] Nao, prefiro usar a varredura nativa do Windows (sem instalar nada)")
+    print(f"[3] Cancelar e sair\n")
+    resp = input("Escolha uma opcao (1/2/3) [Padrao: 1]: ").strip()
+    return resp
 
 def check_requirements():
     try:
         import hid
         return hid, False
     except ImportError:
-        if not ask_user_permission("hidapi"):
-            print("\n[!] Operacao cancelada pelo usuario. Nenhuma alteracao foi feita no seu sistema.")
+        choice = ask_user_permission("hidapi")
+        if choice in ('', '1', 's', 'sim', 'y'):
+            print("\n[+] Instalando biblioteca 'hidapi' temporariamente...")
+            subprocess.run([sys.executable, "-m", "pip", "install", "hidapi"], check=True)
+            import hid
+            return hid, True
+        elif choice == '2':
+            native_windows_scan()
             sys.exit(0)
-        print("[+] Instalando biblioteca 'hidapi' temporariamente...")
-        subprocess.run([sys.executable, "-m", "pip", "install", "hidapi"], check=True)
-        import hid
-        return hid, True
+        else:
+            print("\n[!] Operacao cancelada. Nenhuma alteracao foi feita no seu sistema.")
+            sys.exit(0)
 
 def cleanup(installed_temporarily):
     if installed_temporarily:
-        print("\n" + "-" * 65)
-        resp = input("Deseja desinstalar a biblioteca 'hidapi' agora para manter seu PC limpo? (s/n) [Padrao: s]: ").strip().lower()
+        print("\n" + "=" * 65)
+        print("  LIMPEZA DO SISTEMA (DESINSTALACAO)")
+        print("=" * 65)
+        resp = input("Deseja desinstalar a biblioteca 'hidapi' agora? (s/n) [Padrao: s]: ").strip().lower()
         if resp in ('', 's', 'sim', 'y', 'yes'):
             print("[+] Removendo 'hidapi' do seu sistema...")
             subprocess.run([sys.executable, "-m", "pip", "uninstall", "-y", "hidapi"], check=True)
-            print("[OK] Sistema limpo com sucesso!")
+            print("[OK] Seu computador esta 100% limpo, sem pacotes residuais!")
+        else:
+            print("[*] 'hidapi' mantida conforme sua solicitacao.")
 
 def main():
     installed_temporarily = False
@@ -60,7 +93,7 @@ def main():
             prod = d.get('product_string') or "Desconhecido"
             if usage_page == 1 and usage in (4, 5):
                 gamepads.append(d)
-            elif any(k in prod.lower() for k in ['gamepad', 'controller', 'joystick', 'pad', 'shanwan', 'ipega', 'wireless']):
+            elif any(k in prod.lower() for k in ['gamepad', 'controller', 'joystick', 'pad', 'shanwan', 'ipega', 'wireless', '8bitdo', 'gamesir']):
                 gamepads.append(d)
 
         unique_pads = {}
@@ -71,7 +104,10 @@ def main():
 
         if not unique_pads:
             print("\n[!] Nenhum controle USB ou receptor sem fio foi detectado.")
-            print("    Dica: Ligue o controle e certifique-se de que ele esta conectado.")
+            print("    Dicas:")
+            print("    1. Certifique-se de que o controle esta ligado e pareado.")
+            print("    2. Conecte o cabo USB ou receptor em outra porta.")
+            native_windows_scan()
             return
 
         print(f"\n[+] Encontrado(s) {len(unique_pads)} dispositivo(s):\n")
@@ -100,6 +136,7 @@ def main():
             dev.open(vid, pid)
         except Exception as e:
             print(f"[!] Erro ao abrir dispositivo: {e}")
+            print("Tentando leitura basica...")
             return
 
         desc_hex = ""

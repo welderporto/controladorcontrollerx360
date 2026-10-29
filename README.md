@@ -1,12 +1,23 @@
 # controladorcontrollerx360 🎮 (Xbox 360)
 
-[![GitHub Release](https://img.shields.io/badge/Versão-1.0.0--Unified-blue.svg)](https://github.com/welderporto/controladorcontrollerx360/releases)
+[![GitHub Release](https://img.shields.io/badge/Release-v0.1--beta-blue.svg)](https://github.com/welderporto/controladorcontrollerx360/releases/tag/v0.1-beta)
 [![Plataforma](https://img.shields.io/badge/Plataforma-Xbox%20360%20(RGH%20%7C%20JTAG%20%7C%20ABadAvatar)-green.svg)]()
 [![Licença](https://img.shields.io/badge/Licen%C3%A7a-GPL--3.0-orange.svg)](LICENSE)
 [![Dashboard](https://img.shields.io/badge/Kernel-17559%20%7C%2017489-purple.svg)]()
 
 > **O driver definitivo e unificado de controles para o Xbox 360.**  
 > Uma fusão arquitetural e otimizada entre o [XboxInput](https://github.com/bloxmaster0811/XboxInput) (protocolo GIP para controles Xbox One e Series) e o [hiddriver360](https://github.com/EinTim23/hiddriver360) (protocolo USB HID para controles de terceiros e outras marcas), reescrito com foco em **zero travamentos**, **preservação do Wi-Fi**, **blindagem contra bugs no ABadAvatar** e **assistente na tela 100% em Português (PT-BR)**.
+
+---
+
+## 📥 Downloads Prontos (Releases)
+
+Você pode baixar os arquivos compilados prontos para uso diretamente na página de **[Releases v0.1-beta](https://github.com/welderporto/controladorcontrollerx360/releases/tag/v0.1-beta)**:
+
+* 📦 **[controladorcontrollerx360-v0.1-beta.zip](https://github.com/welderporto/controladorcontrollerx360/releases/download/v0.1-beta/controladorcontrollerx360-v0.1-beta.zip)** - Pacote completo com o executável (`hiddriver.xex`), arquivo de configuração (`hiddriver.json`), exemplo de `launch.ini` e instruções.
+* 🕹️ **[hiddriver.xex](https://github.com/welderporto/controladorcontrollerx360/releases/download/v0.1-beta/hiddriver.xex)** - Executável retail pronto para o DashLaunch.
+* ⚙️ **[hiddriver.json](https://github.com/welderporto/controladorcontrollerx360/releases/download/v0.1-beta/hiddriver.json)** - Configuração de botões e mapeamento para pendrive ou HD.
+* 🗜️ **[Código Fonte (.zip)](https://github.com/welderporto/controladorcontrollerx360/archive/refs/tags/v0.1-beta.zip)** | **[Código Fonte (.tar.gz)](https://github.com/welderporto/controladorcontrollerx360/archive/refs/tags/v0.1-beta.tar.gz)**
 
 ---
 
@@ -58,32 +69,39 @@ O arquivo de configuração é salvo automaticamente para que você nunca mais p
 
 ## 📦 Como Instalar no Xbox 360
 
-1. **Copie os arquivos:**
-   * Coloque o arquivo `XboxInput.xex` na raiz do seu HD ou Pendrive (ex: `Hdd:\XboxInput.xex` ou `Usb:\XboxInput.xex`).
-2. **Configure o DashLaunch:**
+1. **Baixe o arquivo compilado:**
+   * Acesse a aba **[Releases](https://github.com/welderporto/controladorcontrollerx360/releases/tag/v0.1-beta)** e baixe o `controladorcontrollerx360-v0.1-beta.zip` ou o `hiddriver.xex`.
+2. **Copie para o Xbox 360:**
+   * Coloque os arquivos `hiddriver.xex` e `hiddriver.json` na raiz do seu HD ou Pendrive (ex: `Hdd:\hiddriver.xex` ou `Usb:\hiddriver.xex`).
+3. **Configure o DashLaunch:**
    * Abra o arquivo `launch.ini` e adicione o driver na seção `[Plugins]`:
    ```ini
    [Plugins]
-   plugin1 = Hdd:\XboxInput.xex
+   plugin1 = Usb:\hiddriver.xex
    ```
-   *(Caso utilize ABadAvatar em pendrive, configure `plugin1 = Usb:\XboxInput.xex`).*
-3. **Reinicie o console:**
-   * Ligue o Xbox 360 com o controle desconectado.
-   * Quando a Dashboard oficial carregar, plugue o cabo USB ou o receptor sem fio 2.4G.
+   *(Caso o arquivo esteja no HD interno, configure `plugin1 = Hdd:\hiddriver.xex`).*
+4. **Reinicie o console:**
+   * Ligue o Xbox 360.
+   * Quando a Dashboard carregar, plugue o cabo USB ou o receptor sem fio 2.4G.
    * O console vinculará o dispositivo ao anel de luz (Player 1 a 4) instantaneamente.
 
 ---
 
 ## 🤖 Como Adicionar Novos Controles Incompatíveis com IA
 
-Criamos um sistema exclusivo de integração com Inteligência Artificial para que qualquer jogador consiga compatibilizar controles raros, fliperamas artesanais ou controles genéricos de computador.
+Criamos um fluxo completo de Inteligência Artificial para que qualquer pessoa consiga tornar controles genéricos ou raros compatíveis:
 
-👉 **Abra o arquivo:** [PROMPT_ADICIONAR_CONTROLE.md](PROMPT_ADICIONAR_CONTROLE.md)
+👉 **Arquivo de Instruções:** [PROMPT_ADICIONAR_CONTROLE.md](PROMPT_ADICIONAR_CONTROLE.md)
 
-1. Copie o texto do prompt mestre.
-2. Cole no seu assistente de IA favorito (ChatGPT, Claude, Gemini, etc.).
-3. A IA fará uma triagem técnica interativa com você (verificando se o controle está ligado, identificando o modelo, modo de luzes e IDs de hardware).
-4. O prompt contém **travas de segurança estritas** que impedem a IA de mexer em partes críticas do kernel, garantindo que o seu console permaneça 100% seguro contra travamentos.
+1. **Conecte o controle no PC:** Plugue o cabo USB ou o dongle 2.4G e ligue o controle.
+2. **Execute o diagnosticador:**
+   ```powershell
+   python tools/identificar_controle.py
+   ```
+   * *O script pedirá permissão antes de instalar qualquer pacote temporário (`hidapi`) e o desinstalará automaticamente ao final.*
+   * *Se preferir não instalar nada, o script possui modo nativo via PowerShell.*
+3. **Copie o texto gerado e cole na sua IA** (ChatGPT, Claude, Gemini, DeepSeek, etc.) junto com o conteúdo de [PROMPT_ADICIONAR_CONTROLE.md](PROMPT_ADICIONAR_CONTROLE.md).
+4. A IA fará perguntas de triagem sobre seu controle e gerará o bloco JSON exato para você colar em `hiddriver.json` sem riscos para o seu console!
 
 ---
 
