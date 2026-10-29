@@ -1,0 +1,26 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="Detours.cpp" />
+    <ClCompile Include="hid_parser.cpp" />
+    <ClCompile Include="mapping.cpp" />
+    <ClCompile Include="controller_backend.cpp" />
+    <ClCompile Include="gip_gamepad_parser.cpp" />
+    <ClCompile Include="gamepad_mapping.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="xex.xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Detours.h" />
+    <ClInclude Include="hid_parser.h" />
+    <ClInclude Include="mapping.h" />
+    <ClInclude Include="usb.h" />
+    <ClInclude Include="controller_backend.h" />
+    <ClInclude Include="gip_gamepad_parser.h" />
+    <ClInclude Include="gamepad_mapping.h" />
+    <ClInclude Include="gip_protocol.h" />
+    <ClInclude Include="xboxinput_config.h" />
+  </ItemGroup>
+</Project>
