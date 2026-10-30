@@ -89,19 +89,32 @@ O arquivo de configuração é salvo automaticamente para que você nunca mais p
 
 ## 🤖 Como Adicionar Novos Controles Incompatíveis com IA
 
-Criamos um fluxo completo de Inteligência Artificial para que qualquer pessoa consiga tornar controles genéricos ou raros compatíveis:
+Criamos um prompt mestre de Inteligência Artificial para tornar qualquer controle genérico ou raro compatível de forma **rápida, segura e sem demora**:
 
 👉 **Arquivo de Instruções:** [PROMPT_ADICIONAR_CONTROLE.md](PROMPT_ADICIONAR_CONTROLE.md)
 
-1. **Conecte o controle no PC:** Plugue o cabo USB ou o dongle 2.4G e ligue o controle.
-2. **Execute o diagnosticador:**
-   ```powershell
-   python tools/identificar_controle.py
-   ```
-   * *O script pedirá permissão antes de instalar qualquer pacote temporário (`hidapi`) e o desinstalará automaticamente ao final.*
-   * *Se preferir não instalar nada, o script possui modo nativo via PowerShell.*
-3. **Copie o texto gerado e cole na sua IA** (ChatGPT, Claude, Gemini, DeepSeek, etc.) junto com o conteúdo de [PROMPT_ADICIONAR_CONTROLE.md](PROMPT_ADICIONAR_CONTROLE.md).
-4. A IA fará perguntas de triagem sobre seu controle e gerará o bloco JSON exato para você colar em `hiddriver.json` sem riscos para o seu console!
+- ⚡ **Resposta Instantânea:** A IA responde em poucos segundos em texto direto, sem ficar executando comandos demorados em segundo plano.
+- 🛑 **Pergunta Antes de Qualquer Alteração:** A IA é terminantemente proibida de editar arquivos (`launch.ini`, etc.) ou rodar scripts sem pedir e receber sua permissão prévia.
+- 📋 **Entrega Direta do Mapeamento:** A IA gera o bloco pronto para você colar em `hiddriver.json` ou pergunta se deseja que ela mesma salve para você.
+
+### Como Usar:
+1. Abra o arquivo [PROMPT_ADICIONAR_CONTROLE.md](PROMPT_ADICIONAR_CONTROLE.md), copie o texto e cole na sua IA favorita (ChatGPT, Claude, Gemini, DeepSeek, Antigravity, etc.).
+2. A IA fará 3 perguntas rápidas de triagem (marca, modelo e conexão).
+3. Ela entregará o bloco de mapeamento pronto para o `hiddriver.json` na raiz do seu pendrive (`Usb:\hiddriver.json`).
+
+---
+
+## 🎮 Controles Sony, Adaptadores e Hubs (v0.2 em desenvolvimento, não testado em hardware)
+
+| Dispositivo | Entrada | Vibração / LEDs | Observação |
+|---|:---:|:---:|---|
+| DualShock 4 (`054C:05C4`, `09CC`) | ✅ | ✅ lightbar por jogador | Via cabo USB |
+| DualSense / Edge (`054C:0CE6`, `0DF2`) | ✅ | ✅ LEDs de jogador | Via cabo USB |
+| Adaptador USB oficial DS4 (`054C:0BA0`) | ✅ | ✅ | Sem controle ligado, envia estado neutro; o slot do jogador continua reservado |
+| 8BitDo / Mayflash em modo DInput ou Switch | ⚙️ | ❌ | Use o assistente de mapeamento ou o `hiddriver.json` |
+| 8BitDo / Mayflash em modo XInput (`045E:028E`) | ❌ | ❌ | Protocolo diferente de HID, ainda não suportado |
+
+> ⚠️ **Hubs USB:** com 2 ou mais controles modernos (DS4, DualSense), use um hub **com fonte externa** (5V 2A). Hubs passivos podem derrubar a porta USB do console.
 
 ---
 

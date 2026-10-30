@@ -1438,7 +1438,128 @@ int globalIndex = -1;
 void* reportDescriptorBuffer;
 MappingState g_mappingState;
 
+// ---------------------------------------------------------------------------
+// Phase 1: zero-allocation pool for the HID path.
+// USB completion callbacks run at DISPATCH_LEVEL, where the CRT heap must not
+// be touched. Every per-slot object (driver extension, report descriptor and
+// interrupt-IN buffers) is therefore static and indexed by slot. Buffers are
+// 128-byte aligned (Xenon cache line) for DMA safety.
+// ---------------------------------------------------------------------------
+#define HID_POOL_SLOTS             4
+#define HID_REPORT_DESC_MAX        1024   // max report descriptor we accept
+#define HID_INTERRUPT_BUF_MAX      256    // 2 x max interrupt packet (<=128)
+#define HID_MAX_CONSECUTIVE_ERRORS 4      // bounded re-arm on transfer failure
+
+struct __declspec(align(128)) HidExtensionSlot {
+	HidControllerExtension ext;
+};
+struct __declspec(align(128)) HidDescriptorBufferSlot {
+	uint8_t data[HID_REPORT_DESC_MAX];
+};
+struct __declspec(align(128)) HidInterruptBufferSlot {
+	uint8_t data[HID_INTERRUPT_BUF_MAX];
+};
+
+static HidExtensionSlot         g_hidExtensionPool[HID_POOL_SLOTS];
+static HidDescriptorBufferSlot  g_hidDescriptorPool[HID_POOL_SLOTS];
+static HidInterruptBufferSlot   g_hidInterruptPool[HID_POOL_SLOTS];
+static volatile LONG            g_hidConsecutiveErrors[HID_POOL_SLOTS];
+
 int interruptHandler(DWORD deviceHandle, int32_t a2);
+
+// ---------------------------------------------------------------------------
+// Phase 2: native Sony DualShock 4 / DualSense support (USB HID).
+// Input reports are decoded at fixed offsets (the generic descriptor parser is
+// not needed, so a parse failure is tolerated for these devices). Output
+// (rumble + lightbar/player LEDs) is sent as a USB SET_REPORT control transfer
+// from the interrupt-IN completion callback, i.e. in the same DISPATCH_LEVEL
+// context that already re-arms the endpoint. No heap, no logging, no waiting.
+// ---------------------------------------------------------------------------
+enum SonyKind : uint8_t { SONY_NONE = 0, SONY_DS4, SONY_DUALSENSE };
+
+static SonyKind HidSonyKindFor(uint16_t vid, uint16_t pid) {
+	if (vid != 0x054C) return SONY_NONE;
+	switch (pid) {
+	case 0x05C4: case 0x09CC: case 0x0BA0: return SONY_DS4;  // DS4 v1 / v2 / USB wireless adapter
+	case 0x0CE6: case 0x0DF2: return SONY_DUALSENSE;  // DualSense / DualSense Edge
+	default: return SONY_NONE;
+	}
+}
+
+// Maps 0..255 to -32768..32767; invert flips direction (Sony Y: 0 = up).
+static int16_t HidSonyAxis(uint8_t v, bool invert) {
+	int32_t r = (int32_t)v * 257 - 32768;
+	if (invert) r = -r - 1;
+	return (int16_t)r;
+}
+
+// raw points at the report INCLUDING the report ID byte (0x01).
+static bool HidSonyDecodeInput(SonyKind kind, const uint8_t* raw, ButtonsReport* out) {
+	if (!raw || raw[0] != 0x01) return false;
+	const uint8_t* p = raw + 1;
+	uint8_t b0, b1, b2, l2, r2;
+	if (kind == SONY_DS4) {
+		b0 = p[4]; b1 = p[5]; b2 = p[6]; l2 = p[7]; r2 = p[8];
+	} else {
+		l2 = p[4]; r2 = p[5]; b0 = p[7]; b1 = p[8]; b2 = p[9];
+	}
+
+	out->x  = HidSonyAxis(p[0], false);
+	out->y  = HidSonyAxis(p[1], true);
+	out->z  = HidSonyAxis(p[2], false);
+	out->rz = HidSonyAxis(p[3], true);
+	out->rx = l2;   // analog triggers (read as bLeftTrigger / bRightTrigger)
+	out->ry = r2;
+
+	const uint8_t hat = b0 & 0x0F;
+	out->has_hat_switch = true;
+	out->hatSwitch = (hat <= 7) ? hat : (uint8_t)HatSwitch::HAT_NEUTRAL;
+
+	out->x_button = (b0 & 0x10) ? 1 : 0;  // Square
+	out->a_button = (b0 & 0x20) ? 1 : 0;  // Cross
+	out->b_button = (b0 & 0x40) ? 1 : 0;  // Circle
+	out->y_button = (b0 & 0x80) ? 1 : 0;  // Triangle
+	out->l1    = (b1 & 0x01) ? 1 : 0;
+	out->r1    = (b1 & 0x02) ? 1 : 0;
+	out->back  = (b1 & 0x10) ? 1 : 0;     // Share / Create
+	out->start = (b1 & 0x20) ? 1 : 0;     // Options
+	out->l3    = (b1 & 0x40) ? 1 : 0;
+	out->r3    = (b1 & 0x80) ? 1 : 0;
+	out->xbox  = (b2 & 0x01) ? 1 : 0;     // PS button
+	return true;
+}
+
+struct SonyOutputState {
+	volatile LONG dirty;
+	volatile LONG inFlight;
+	volatile LONG left;    // large / low-frequency motor, 0..255
+	volatile LONG right;   // small / high-frequency motor, 0..255
+};
+struct __declspec(align(128)) SonyOutputBuffer {
+	uint8_t data[64];
+};
+static SonyOutputState  g_sonyOut[HID_POOL_SLOTS];
+static SonyOutputBuffer g_sonyOutBuf[HID_POOL_SLOTS];
+// Phase 3: wireless adapter link state per slot (1 = pad paired and on).
+static volatile LONG    g_sonyLinked[HID_POOL_SLOTS];
+
+// The official DS4 USB Wireless Adapter enumerates even with no pad turned on
+// and then streams all-zero reports. Byte 31, bit 2 set means "no pad linked".
+static bool HidSonyIsDongle(uint16_t vid, uint16_t pid) {
+	return vid == 0x054C && pid == 0x0BA0;
+}
+static bool HidSonyDongleDormant(const uint8_t* raw) {
+	return (raw[31] & 0x04) != 0;
+}
+
+// Safe from any thread: only records the wanted motor values.
+static void HidSonyRequestRumble(int slot, uint8_t left, uint8_t right) {
+	if (slot < 0 || slot >= HID_POOL_SLOTS) return;
+	if (g_sonyOut[slot].left == left && g_sonyOut[slot].right == right) return;
+	g_sonyOut[slot].left = left;
+	g_sonyOut[slot].right = right;
+	InterlockedExchange(&g_sonyOut[slot].dirty, 1);
+}
 
 // Keep every IN report item; the driver uses all axes, the hat, and buttons.
 bool CALLBACK_HIDParser_FilterHIDReportItem(HID_ReportItem_t* const CurrentItem) {
@@ -1534,6 +1655,68 @@ int32_t noopCompleteHandler(DWORD deviceHandle, int32_t status) {
 	return 0;
 }
 
+// Control-transfer completion for Sony output reports. The argument is the
+// address of the control TRB, which sits 36 bytes into HidControllerExtension.
+// Slots are static, so a late completion after unplug only touches pool memory.
+int32_t HidSonyOutputComplete(DWORD trbAddr, int32_t status) {
+	HidControllerExtension* ext = (HidControllerExtension*)((BYTE*)trbAddr - 36);
+	if (ext && ext->deviceHandle) {
+		int i = ext->slotIndex;
+		if (i >= 0 && i < HID_POOL_SLOTS)
+			InterlockedExchange(&g_sonyOut[i].inFlight, 0);
+	}
+	return 0;
+}
+
+// Called from interruptHandler (DISPATCH_LEVEL). Submits at most one pending
+// output report per slot; never blocks and never allocates.
+static void HidSonySubmitPending(int index, HidControllerExtension* ext, SonyKind kind, uint8_t userIndex) {
+	if (index < 0 || index >= HID_POOL_SLOTS || !ext || !ext->deviceHandle) return;
+	SonyOutputState* st = &g_sonyOut[index];
+	if (!st->dirty) return;
+	if (InterlockedCompareExchange(&st->inFlight, 1, 0) != 0) return; // busy, stay dirty
+	InterlockedExchange(&st->dirty, 0);
+
+	static const uint8_t kColors[4][3] = {
+		{ 0, 0, 64 }, { 64, 0, 0 }, { 0, 64, 0 }, { 48, 32, 0 }
+	};
+	static const uint8_t kPlayerLeds[4] = { 0x04, 0x0A, 0x15, 0x1B };
+	const uint8_t u = (userIndex < 4) ? userIndex : 0;
+	const uint8_t left = (uint8_t)st->left;
+	const uint8_t right = (uint8_t)st->right;
+	uint8_t* b = g_sonyOutBuf[index].data;
+	uint16_t len;
+	uint16_t reportId;
+
+	if (kind == SONY_DS4) {
+		memset(b, 0, 32);
+		b[0] = 0x05;
+		b[1] = 0x03;          // motor + lightbar valid
+		b[4] = right;         // small motor
+		b[5] = left;          // large motor
+		b[6] = kColors[u][0]; b[7] = kColors[u][1]; b[8] = kColors[u][2];
+		len = 32; reportId = 0x05;
+	} else {
+		memset(b, 0, 63);
+		b[0] = 0x02;
+		b[1] = 0x01;          // compatible vibration
+		b[2] = 0x04 | 0x10;   // lightbar + player LEDs
+		b[3] = right;
+		b[4] = left;
+		b[39] = 0x04 | 0x02;  // vibration2 + lightbar setup
+		b[42] = 0x02;         // lightbar setup: light out
+		b[44] = kPlayerLeds[u];
+		b[45] = kColors[u][0]; b[46] = kColors[u][1]; b[47] = kColors[u][2];
+		len = 63; reportId = 0x02;
+	}
+
+	int32_t r = SendControlRequest(ext->deviceHandle, &ext->controlTrb,
+		0x21, 0x09, (uint16_t)(0x0200 | reportId), ext->interfaceNumber,
+		len, b, (DWORD)HidSonyOutputComplete);
+	if (r < 0)
+		InterlockedExchange(&st->inFlight, 0);
+}
+
 int32_t setConfigurationComplete(DWORD deviceHandle, int32_t status) {
 	HidControllerExtension* controllerDriver = (HidControllerExtension*)((BYTE*)deviceHandle - 36);
 	if (!controllerDriver) return 0;
@@ -1557,7 +1740,15 @@ int32_t setConfigurationComplete(DWORD deviceHandle, int32_t status) {
 			return -1;
 		}
 
-		ctrl->reportDescriptorBuffer = calloc(1, ctrl->hidDescriptorBuffer.wDescriptorLength);
+		if (ctrl->hidDescriptorBuffer.wDescriptorLength > HID_REPORT_DESC_MAX) {
+			XBOXINPUT_DBG("XBOXINPUT: HID report descriptor too large (%u)\r\n",
+				(unsigned)ctrl->hidDescriptorBuffer.wDescriptorLength);
+			ctrl->initState = INIT_FAILED;
+			return -1;
+		}
+		// Static per-slot buffer: no heap allocation at DISPATCH_LEVEL.
+		memset(g_hidDescriptorPool[index].data, 0, ctrl->hidDescriptorBuffer.wDescriptorLength);
+		ctrl->reportDescriptorBuffer = g_hidDescriptorPool[index].data;
 		ctrl->initState = InitState::INIT_GET_REPORT_DESCRIPTOR;
 		
 		SendControlRequest(
@@ -1579,20 +1770,23 @@ int32_t setConfigurationComplete(DWORD deviceHandle, int32_t status) {
 			ctrl->hidDescriptorBuffer.wDescriptorLength,
 			&reportInfo);
 
-		if (ctrl->reportDescriptorBuffer) {
-			free(ctrl->reportDescriptorBuffer);
-			ctrl->reportDescriptorBuffer = nullptr;
-		}
+		// Static pool buffer: just drop the reference, nothing to free.
+		ctrl->reportDescriptorBuffer = nullptr;
 
 		// Check for parse errors and null pointer BEFORE any dereferencing (B6 Fix)
+		const SonyKind sonyKind = HidSonyKindFor(ctrl->vendorId, ctrl->productId);
 		if (parseResult != HID_PARSE_Successful || !reportInfo) {
-			XBOXINPUT_LOG("XBOXINPUT: Failed to parse HID descriptor: error %d\r\n", parseResult);
-			ctrl->initState = InitState::INIT_FAILED;
-			return -1;
+			if (sonyKind == SONY_NONE) {
+				XBOXINPUT_LOG("XBOXINPUT: Failed to parse HID descriptor: error %d\r\n", parseResult);
+				ctrl->initState = InitState::INIT_FAILED;
+				return -1;
+			}
+			// Sony pads are decoded natively; the descriptor is not required.
+			reportInfo = nullptr;
 		}
 
 		ctrl->reportInfo = reportInfo;
-		ctrl->reportId = FindGamepadReportId(reportInfo);
+		ctrl->reportId = reportInfo ? FindGamepadReportId(reportInfo) : 1;
 
 		usb_endpoint_descriptor* endpoint_descriptor = UsbdGetEndpointDescriptor(
 			controllerDriver->deviceHandle, 0, USB_ENDPOINT_TYPE_INTERRUPT, USB_DIRECTION_IN);
@@ -1617,8 +1811,14 @@ int32_t setConfigurationComplete(DWORD deviceHandle, int32_t status) {
 		}
 
 		uint16_t pktSize = swap_endianness_16(endpoint_descriptor->wMaxPacketSize) & 0x7FF;
-		ctrl->reportData = malloc(pktSize * 2);
+		if (pktSize == 0 || (size_t)pktSize * 2 > HID_INTERRUPT_BUF_MAX) {
+			XBOXINPUT_DBG("XBOXINPUT: unsupported interrupt packet size %u\r\n", (unsigned)pktSize);
+			ctrl->initState = InitState::INIT_FAILED;
+			return -1;
+		}
+		ctrl->reportData = g_hidInterruptPool[index].data;
 		memset(ctrl->reportData, 0, pktSize * 2);
+		g_hidConsecutiveErrors[index] = 0;
 
 		controllerDriver->interruptTrb.savedEndpoint = controllerDriver->interruptTrb.endpoint; 
 		controllerDriver->interruptTrb.length = pktSize;
@@ -1633,6 +1833,11 @@ int32_t setConfigurationComplete(DWORD deviceHandle, int32_t status) {
 		ctrl->userIndex = userIndex;
 		ctrl->deviceContext = context;
 
+		if (sonyKind != SONY_NONE) {
+			// Fresh output state; first report sets lightbar / player LEDs.
+			memset(&g_sonyOut[index], 0, sizeof(SonyOutputState));
+			g_sonyOut[index].dirty = 1;
+		}
 		XBOXINPUT_LOG("XBOXINPUT: Registered virtual HID controller in XAM with index: %d, slot: %d\r\n", userIndex, index);
 
 		if (NeedsDualshock3Handshake(ctrl->vendorId, ctrl->productId)) {
@@ -1828,6 +2033,7 @@ unsigned int __stdcall MappingManagerThreadProc(void* param){
 			if (connectedControllers[i].controllerDriver &&
 				connectedControllers[i].reportInfo &&
 				!connectedControllers[i].map &&
+				HidSonyKindFor(connectedControllers[i].vendorId, connectedControllers[i].productId) == SONY_NONE &&
 				!g_mappingState.active) {
 
 				DbgPrint("EINTIM: Starting mapping for controller %d (VID:%04x PID:%04x)\n",
@@ -2180,7 +2386,10 @@ int interruptHandler(DWORD deviceHandle, int32_t a2) {
 		}
 	}
 
-	bool hasReportId = connectedControllers[index].reportInfo &&
+	const SonyKind sonyKind = HidSonyKindFor(connectedControllers[index].vendorId,
+		connectedControllers[index].productId);
+	bool sonyDormant = false;
+	bool hasReportId = sonyKind == SONY_NONE && connectedControllers[index].reportInfo &&
 		connectedControllers[index].reportInfo->UsingReportIDs; 
 	if (report->reportId == connectedControllers[index].reportId || !hasReportId) {
 		ButtonsReport buttonReport;
@@ -2202,7 +2411,27 @@ int interruptHandler(DWORD deviceHandle, int32_t a2) {
 		/*
 		"WARNING: The HID descriptor does not match the data in the controller payload at all. My guess is it's just the Bluetooth HID descriptor c/p over. Because of that, if you enable the controller on Windows by poking that enable interrupt packet with your favorite USB tool, Windows will go crazy trying to interpret the packets it gets. I now have this on-screen controller keyboard I don't know how to get rid of."
 		*/
-		if (NeedsNintendoHandshake(connectedControllers[index].vendorId, connectedControllers[index].productId)) {
+		if (sonyKind != SONY_NONE) {
+			if (!HidSonyDecodeInput(sonyKind, (const uint8_t*)report, &buttonReport)) {
+				// Not the 0x01 input report: ignore, just keep the endpoint armed.
+				return UsbdQueueAsyncTransfer(driverExtension->deviceHandle,
+					&driverExtension->interruptTrb);
+			}
+			if (HidSonyIsDongle(connectedControllers[index].vendorId, connectedControllers[index].productId)) {
+				if (HidSonyDongleDormant((const uint8_t*)report)) {
+					// No pad linked: present a neutral state and send nothing.
+					memset(&buttonReport, 0, sizeof(ButtonsReport));
+					buttonReport.has_hat_switch = false;
+					g_sonyLinked[index] = 0;
+					sonyDormant = true;
+				} else if (!g_sonyLinked[index]) {
+					// Pad just linked: (re)send lightbar / rumble state.
+					g_sonyLinked[index] = 1;
+					InterlockedExchange(&g_sonyOut[index].dirty, 1);
+				}
+			}
+		}
+		else if (NeedsNintendoHandshake(connectedControllers[index].vendorId, connectedControllers[index].productId)) {
 			switch_pro_input_report* switch_report = (switch_pro_input_report*)payload;
 			
 			uint16_t lx = switch_report->left_stick[0] | ((switch_report->left_stick[1] & 0x0F) << 8);
@@ -2300,7 +2529,20 @@ int interruptHandler(DWORD deviceHandle, int32_t a2) {
 		connectedControllers[index].currentState = buttonReport;
 	}
 
-	return UsbdQueueAsyncTransfer(driverExtension->deviceHandle, &driverExtension->interruptTrb);
+	// Bounded re-arm: a failing UsbdQueueAsyncTransfer completes synchronously
+	// and would recurse forever at DISPATCH_LEVEL after a hot-unplug.
+	if (sonyKind != SONY_NONE && !sonyDormant)
+		HidSonySubmitPending(index, driverExtension, sonyKind, connectedControllers[index].userIndex);
+	int32_t rearm = UsbdQueueAsyncTransfer(driverExtension->deviceHandle, &driverExtension->interruptTrb);
+	if (rearm < 0) {
+		if (InterlockedIncrement(&g_hidConsecutiveErrors[index]) >= HID_MAX_CONSECUTIVE_ERRORS) {
+			// Stop re-arming; teardown will complete via HidRemoveDeviceHook.
+			return 0;
+		}
+	} else {
+		g_hidConsecutiveErrors[index] = 0;
+	}
+	return rearm;
 }
 
 
@@ -2341,16 +2583,14 @@ int HidRemoveDeviceHook(deviceHandle* deviceHandle2) {
 		}
 		// Clear mapping data
 		connectedControllers[index].map = nullptr;
-		if (connectedControllers[index].reportData) {
-			free(connectedControllers[index].reportData);
-			connectedControllers[index].reportData = nullptr;
-		}
-		if (connectedControllers[index].reportDescriptorBuffer) {
-			free(connectedControllers[index].reportDescriptorBuffer);
-			connectedControllers[index].reportDescriptorBuffer = nullptr;
-		}
+		// Phase 1: all buffers live in the static pool, nothing to free.
+		connectedControllers[index].reportData = nullptr;
+		connectedControllers[index].reportDescriptorBuffer = nullptr;
+		g_hidConsecutiveErrors[index] = 0;
+		memset(&g_sonyOut[index], 0, sizeof(SonyOutputState));
+		g_sonyLinked[index] = 0;
 		memset(&connectedControllers[index], 0, sizeof(Controller));
-		delete deviceHandle2->driver;
+		memset(&g_hidExtensionPool[index], 0, sizeof(HidExtensionSlot));
 		deviceHandle2->driver = nullptr;
 		XBOXINPUT_DBG("XBOXINPUT: Removed controller with handle %p\n", deviceHandle2);
 		XamUserBindDeviceCallback(0xa7553952 + index, 0x0000000010000005 + index, 0, true, 0);
@@ -4663,11 +4903,23 @@ int HidAddDeviceHook(deviceHandle* deviceHandle) {
 		
 		int index = -1;
 		for (int i = 0; i < (sizeof(connectedControllers) / sizeof(Controller)); i++) {
-			if (!connectedControllers[i].controllerDriver) {
-				DbgPrint("Assigning controller to index %d\n", i);
-				index = i;
-				break;
+			if (connectedControllers[i].controllerDriver)
+				continue;
+			// Never share an XAM context (0x10000005 + i) with a live GIP session.
+			const uint32_t slotContext = 0x0000000010000005 + i;
+			bool gipUsesSlot = false;
+			for (int j = 0; j < GIP_MAX_SESSIONS; ++j) {
+				if (g_gipSessions[j].reserved &&
+					g_gipSessions[j].runtime.deviceContext == slotContext) {
+					gipUsesSlot = true;
+					break;
+				}
 			}
+			if (gipUsesSlot)
+				continue;
+			DbgPrint("Assigning controller to index %d\n", i);
+			index = i;
+			break;
 		}
 
 		if (index == -1) {
@@ -4687,7 +4939,8 @@ int HidAddDeviceHook(deviceHandle* deviceHandle) {
 		ctrl->nintendo_handshake_state = NINTENDO_HANDSHAKE_STATE::INITIAL;
 		ctrl->initState = InitState::INIT_SET_CONFIGURATION;
 
-		HidControllerExtension* controllerDriver = new HidControllerExtension();
+		HidControllerExtension* controllerDriver = &g_hidExtensionPool[index].ext;
+		memset(controllerDriver, 0, sizeof(HidControllerExtension));
 		ctrl->deviceHandle = deviceHandle;
 		controllerDriver->deviceType = 0;
 		deviceHandle->driver = controllerDriver;
@@ -4810,6 +5063,18 @@ DWORD XamInputSetStateHook(DWORD user, DWORD flags, XINPUT_VIBRATION* vibration)
 		}
 		if (!c)
 			return status;
+		const SonyKind sonyKind = HidSonyKindFor(c->vendorId, c->productId);
+		if (sonyKind != SONY_NONE) {
+			const XboxInputMappingOptions* mapping = XboxInputGetActiveMapping();
+			const BYTE left = XboxInputScaleRumble(
+				vibration ? (BYTE)(vibration->wLeftMotorSpeed >> 8) : 0,
+				mapping->rumblePercent);
+			const BYTE right = XboxInputScaleRumble(
+				vibration ? (BYTE)(vibration->wRightMotorSpeed >> 8) : 0,
+				mapping->rumblePercent);
+			// Only records the request; the USB submit happens in interruptHandler.
+			HidSonyRequestRumble((int)(c - connectedControllers), left, right);
+		}
 		return ERROR_SUCCESS;
 	}
 
