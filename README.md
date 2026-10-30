@@ -69,6 +69,16 @@ O arquivo de configuração é salvo automaticamente para que você nunca mais p
 
 ## 📦 Como Instalar no Xbox 360
 
+### Opção A: 🤖 Instalação 100% Automática via IA (Recomendado)
+Se você não quer se preocupar em baixar arquivos, descompactar e editar o `launch.ini` manualmente:
+1. Conecte o seu pendrive USB no computador.
+2. Abra o arquivo **[PROMPT_INSTALACAO_AUTOMATIZADA_IA.md](PROMPT_INSTALACAO_AUTOMATIZADA_IA.md)**, copie o texto e cole na sua IA favorita (ChatGPT, Claude, Gemini, Antigravity).
+3. A IA perguntará a letra do pendrive (ex: `E:`, `G:`), baixará os arquivos direto do GitHub e configurará o seu `launch.ini` no slot correto sem apagar nada!
+
+---
+
+### Opção B: Instalação Manual
+
 1. **Baixe o arquivo compilado:**
    * Acesse a aba **[Releases](https://github.com/welderporto/controladorcontrollerx360/releases/tag/v0.1-beta)** e baixe o `controladorcontrollerx360-v0.1-beta.zip` ou o `hiddriver.xex`.
 2. **Copie para o Xbox 360:**
@@ -81,9 +91,28 @@ O arquivo de configuração é salvo automaticamente para que você nunca mais p
    ```
    *(Caso o arquivo esteja no HD interno, configure `plugin1 = Hdd:\hiddriver.xex`).*
 4. **Reinicie o console:**
-   * Ligue o Xbox 360.
-   * Quando a Dashboard carregar, plugue o cabo USB ou o receptor sem fio 2.4G.
-   * O console vinculará o dispositivo ao anel de luz (Player 1 a 4) instantaneamente.
+   * Ligue o Xbox 360 com o pendrive inserido.
+   * Quando a Dashboard carregar, surgirá a notificação: 🔔 *"Iniciando o hiddriver, aguarde..."*.
+   * Plugue o cabo USB ou o receptor sem fio 2.4G.
+
+---
+
+## 🎮 Como Sincronizar o iPega PG-9076 / ShanWan no Xbox 360
+
+> ⚠️ **ATENÇÃO - POR QUE O IPEGA 9076 NÃO SINCRONIZA SE LIGAR ERRADO:**  
+> O controle iPega PG-9076 possui múltiplos modos de conexão (Android, iOS, PC, 2.4G Dongle).  
+> **Se você ligar o controle pressionando apenas o botão HOME, ele ligará em modo Bluetooth/Android e os LEDs ficarão piscando infinitamente sem NUNCA sincronizar com o receptor USB 2.4G!**
+
+### ✅ Procedimento Correto de Sincronização (Modo 2.4G Dongle):
+1. **Plugue o receptor USB 2.4G** em qualquer porta USB do Xbox 360 (frontal ou traseira).
+2. Com o controle desligado, segure **`L1 + HOME` juntos por 3 a 5 segundos**.
+3. Os **LEDs 1 e 2** começarão a piscar rápido buscando o receptor e, em seguida, **ficarão ACESOS FIXOS (sem piscar)**.
+4. Assim que os LEDs 1 e 2 ficarem fixos, o Xbox 360 vinculará o controle como **Player 1** e ele responderá imediatamente no menu e nos jogos!
+
+### 🔄 O controle continua piscando e não sincroniza com o Dongle?
+* **Reset de Pareamento do Dongle:** Aproxime o controle a 10 cm do receptor USB espetado e segure **`L1 + HOME`** por 5 segundos até os LEDs 1 e 2 pararem de piscar.
+* **Uso com Cabo USB:** Se preferir jogar via cabo Micro-USB com fio, plugue o cabo direto no Xbox 360 e ligue o controle segurando **`START + HOME`** ou apenas **`HOME`**.
+* **Checagem de Notificação:** Se o console NÃO exibir 🔔 *"Iniciando o hiddriver..."* ao ligar, revise o arquivo `launch.ini` no pendrive para ter certeza de que a linha `pluginX = Usb:\hiddriver.xex` está salva corretamente.
 
 ---
 
