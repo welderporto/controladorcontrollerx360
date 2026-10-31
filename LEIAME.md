@@ -1,6 +1,6 @@
 # controladorcontrollerx360 🎮 (Xbox 360)
 
-[![GitHub Release](https://img.shields.io/badge/Release-v0.1--beta-blue.svg)](https://github.com/welderporto/controladorcontrollerx360/releases/tag/v0.1-beta)
+[![GitHub Release](https://img.shields.io/badge/Release-v0.2--beta-blue.svg)](https://github.com/welderporto/controladorcontrollerx360/releases/tag/v0.2-beta)
 [![Plataforma](https://img.shields.io/badge/Plataforma-Xbox%20360%20(RGH%20%7C%20JTAG%20%7C%20ABadAvatar)-green.svg)]()
 [![Licença](https://img.shields.io/badge/Licen%C3%A7a-GPL--3.0-orange.svg)](LICENSE)
 [![Dashboard](https://img.shields.io/badge/Kernel-17559%20%7C%2017489-purple.svg)]()
@@ -12,12 +12,12 @@
 
 ## 📥 Downloads Prontos (Releases)
 
-Você pode baixar os arquivos compilados prontos para uso diretamente na página de **[Releases v0.1-beta](https://github.com/welderporto/controladorcontrollerx360/releases/tag/v0.1-beta)**:
+Você pode baixar os arquivos compilados prontos para uso diretamente na página de **[Releases v0.2-beta](https://github.com/welderporto/controladorcontrollerx360/releases/tag/v0.2-beta)**:
 
-* 📦 **[controladorcontrollerx360-v0.1-beta.zip](https://github.com/welderporto/controladorcontrollerx360/releases/download/v0.1-beta/controladorcontrollerx360-v0.1-beta.zip)** - Pacote completo com o executável (`hiddriver.xex`), arquivo de configuração (`hiddriver.json`), exemplo de `launch.ini` e instruções.
-* 🕹️ **[hiddriver.xex](https://github.com/welderporto/controladorcontrollerx360/releases/download/v0.1-beta/hiddriver.xex)** - Executável retail pronto para o DashLaunch.
-* ⚙️ **[hiddriver.json](https://github.com/welderporto/controladorcontrollerx360/releases/download/v0.1-beta/hiddriver.json)** - Configuração de botões e mapeamento para pendrive ou HD.
-* 🗜️ **[Código Fonte (.zip)](https://github.com/welderporto/controladorcontrollerx360/archive/refs/tags/v0.1-beta.zip)** | **[Código Fonte (.tar.gz)](https://github.com/welderporto/controladorcontrollerx360/archive/refs/tags/v0.1-beta.tar.gz)**
+* 📦 **[controladorcontrollerx360-v0.2-beta.zip](https://github.com/welderporto/controladorcontrollerx360/releases/download/v0.2-beta/controladorcontrollerx360-v0.2-beta.zip)** - Pacote completo com o executável (`hiddriver.xex`), arquivo de configuração (`hiddriver.json`), exemplo de `launch.ini` e instruções.
+* 🕹️ **[hiddriver.xex](https://github.com/welderporto/controladorcontrollerx360/releases/download/v0.2-beta/hiddriver.xex)** - Executável retail pronto para o DashLaunch.
+* ⚙️ **[hiddriver.json](https://github.com/welderporto/controladorcontrollerx360/releases/download/v0.2-beta/hiddriver.json)** - Configuração de botões e mapeamento para pendrive ou HD.
+* 🗜️ **[Código Fonte (.zip)](https://github.com/welderporto/controladorcontrollerx360/archive/refs/tags/v0.2-beta.zip)** | **[Código Fonte (.tar.gz)](https://github.com/welderporto/controladorcontrollerx360/archive/refs/tags/v0.2-beta.tar.gz)**
 
 ---
 
@@ -80,7 +80,7 @@ Se você não quer se preocupar em baixar arquivos, descompactar e editar o `lau
 ### Opção B: Instalação Manual
 
 1. **Baixe o arquivo compilado:**
-   * Acesse a aba **[Releases](https://github.com/welderporto/controladorcontrollerx360/releases/tag/v0.1-beta)** e baixe o `controladorcontrollerx360-v0.1-beta.zip` ou o `hiddriver.xex`.
+   * Acesse a aba **[Releases](https://github.com/welderporto/controladorcontrollerx360/releases/tag/v0.2-beta)** e baixe o `controladorcontrollerx360-v0.2-beta.zip` ou o `hiddriver.xex`.
 2. **Copie para o Xbox 360:**
    * Coloque os arquivos `hiddriver.xex` e `hiddriver.json` na raiz do seu HD ou Pendrive (ex: `Hdd:\hiddriver.xex` ou `Usb:\hiddriver.xex`).
 3. **Configure o DashLaunch:**
